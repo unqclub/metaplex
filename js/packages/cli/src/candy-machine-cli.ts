@@ -1,10 +1,45 @@
 #!/usr/bin/env ts-node
-import * as fs from 'fs';
-import * as path from 'path';
-import { program } from 'commander';
 import * as anchor from '@project-serum/anchor';
+import { Token, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+import { program } from 'commander';
+import * as fs from 'fs';
+import log from 'loglevel';
 import fetch from 'node-fetch';
+import * as path from 'path';
 
+import { createGenerativeArt } from './commands/createArt';
+import { generateConfigurations } from './commands/generateConfigurations';
+import { mint } from './commands/mint';
+import { signMetadata } from './commands/sign';
+import {
+  getAccountsByCreatorAddress,
+  signAllMetadataFromCandyMachine,
+} from './commands/signAll';
+import { updateFromCache } from './commands/updateFromCache';
+import { upload } from './commands/upload';
+import { verifyTokenMetadata } from './commands/verifyTokenMetadata';
+import { withdraw } from './commands/withdraw';
+import {
+  AccountAndPubkey,
+  getBalance,
+  getCandyMachineAddress,
+  getProgramAccounts,
+  loadCandyProgram,
+  loadWalletKey,
+} from './helpers/accounts';
+import { loadCache, saveCache } from './helpers/cache';
+import {
+  CACHE_PATH,
+  CANDY_MACHINE_PROGRAM_ID,
+  CONFIG_ARRAY_START,
+  CONFIG_LINE_SIZE,
+  EXTENSION_GIF,
+  EXTENSION_JPG,
+  EXTENSION_JSON,
+  EXTENSION_PNG,
+} from './helpers/constants';
+import { createMetadataFiles } from './helpers/metadata';
 import {
   chunks,
   fromUTF8Array,
@@ -12,42 +47,8 @@ import {
   parsePrice,
   shuffle,
 } from './helpers/various';
-import { Token, TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import {
-  CACHE_PATH,
-  CONFIG_ARRAY_START,
-  CONFIG_LINE_SIZE,
-  EXTENSION_JSON,
-  EXTENSION_PNG,
-  EXTENSION_JPG,
-  EXTENSION_GIF,
-  CANDY_MACHINE_PROGRAM_ID,
-} from './helpers/constants';
-import {
-  getBalance,
-  getCandyMachineAddress,
-  getProgramAccounts,
-  loadCandyProgram,
-  loadWalletKey,
-  AccountAndPubkey,
-} from './helpers/accounts';
 import { Config } from './types';
-import { upload } from './commands/upload';
-import { verifyTokenMetadata } from './commands/verifyTokenMetadata';
-import { generateConfigurations } from './commands/generateConfigurations';
-import { loadCache, saveCache } from './helpers/cache';
-import { mint } from './commands/mint';
-import { signMetadata } from './commands/sign';
-import {
-  getAccountsByCreatorAddress,
-  signAllMetadataFromCandyMachine,
-} from './commands/signAll';
-import log from 'loglevel';
-import { createMetadataFiles } from './helpers/metadata';
-import { createGenerativeArt } from './commands/createArt';
-import { withdraw } from './commands/withdraw';
-import { updateFromCache } from './commands/updateFromCache';
+
 program.version('0.0.2');
 
 if (!fs.existsSync(CACHE_PATH)) {
@@ -929,6 +930,7 @@ programCommand('sign_all')
     );
   });
 
+//urkes check this out
 programCommand('update_existing_nfts_from_latest_cache_file')
   .option('-b, --batch-size <string>', 'Batch size', '2')
   .option('-nc, --new-cache <string>', 'Path to new updated cache file')

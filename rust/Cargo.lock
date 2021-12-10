@@ -2030,7 +2030,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "arrayref",
- "metaplex-token-metadata 0.0.1",
+ "metaplex-token-metadata 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "spl-token",
 ]
 

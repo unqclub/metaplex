@@ -3,10 +3,10 @@ url = "https://anchor.projectserum.com"
 
 [provider]
 cluster = "devnet"
-wallet = "~/.config/solana/id.json"
+wallet = "/Users/urkes/unq-solana-wallet/unq-wallet-keypair.json"
 
 [programs.mainnet]
-nft_candy_machine = "cndyAnrLdpjq1Ssp1z8xxDsB8dxe7u4HL5Nxi2K5WXZ"
+nft_candy_machine = "6U5p5noGQyx8Je33c8jp6dg3hzKKTcwuvtSEKJzK91KQ"
 fair_launch = "faircnAB9k59Y4TXmLabBULeuTLgV7TkGMGNkjnA15j"
 gumdrop = "gdrpGjVffourzkdDRrQmySw4aTHr8a3xmQzzxSwFD1a"
 

@@ -28,6 +28,8 @@ import { createConfigAccount } from './instructions';
 import { web3 } from '@project-serum/anchor';
 import log from 'loglevel';
 import { AccountLayout, u64 } from '@solana/spl-token';
+// import { IDL as idl } from './idl';
+import { IDL as idl } from './nft_candy_machine';
 
 export type AccountAndPubkey = {
   pubkey: string;
@@ -470,7 +472,7 @@ export async function loadCandyProgram(
   const provider = new anchor.Provider(solConnection, walletWrapper, {
     preflightCommitment: 'recent',
   });
-  const idl = await anchor.Program.fetchIdl(CANDY_MACHINE_PROGRAM_ID, provider);
+  // const idl = await anchor.Program.fetchIdl(CANDY_MACHINE_PROGRAM_ID, provider);
   const program = new anchor.Program(idl, CANDY_MACHINE_PROGRAM_ID, provider);
   log.debug('program id from anchor', program.programId.toBase58());
   return program;

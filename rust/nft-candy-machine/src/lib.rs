@@ -6,7 +6,7 @@ use {
         prelude::*, solana_program::system_program, AnchorDeserialize, AnchorSerialize,
         Discriminator, Key,
     },
-    anchor_spl::token::Token,
+    anchor_spl::token::{Token,TokenAccount},
     arrayref::array_ref,
     metaplex_token_metadata::{
         instruction::{create_master_edition, create_metadata_accounts, update_metadata_accounts},
@@ -17,9 +17,15 @@ use {
     spl_token::state::Mint,
     std::cell::Ref,
 };
-anchor_lang::declare_id!("cndyAnrLdpjq1Ssp1z8xxDsB8dxe7u4HL5Nxi2K5WXZ");
+anchor_lang::declare_id!("6U5p5noGQyx8Je33c8jp6dg3hzKKTcwuvtSEKJzK91KQ");
 
 const PREFIX: &str = "candy_machine";
+const DMTR_MINT_ADDRESS: &str = "DMTRqrUy2MVRTLZN7wv54sboHZDiiVsbeqXAiCUpDyNZ";
+const UNIVERSE_SIGNER_SEED: &str = "universe";
+const UNIVERSE_VERSION: &str = "a";
+const OUR_AUTHORITY: &str = "DmVkUohW53ruGuGtDeq2M66XCtZkYyGyFkBeHauFwsY9";
+const PHASE_2_STARTS: i64 = 1639339200;
+
 #[program]
 pub mod nft_candy_machine {
     use anchor_lang::solana_program::{
@@ -29,10 +35,25 @@ pub mod nft_candy_machine {
 
     use super::*;
 
-    pub fn mint_nft<'info>(ctx: Context<'_, '_, '_, 'info, MintNFT<'info>>) -> ProgramResult {
+    pub fn mint_nft<'info>(
+        ctx: Context<'_, '_, '_, 'info, MintNFT<'info>>,
+        universe_metadata_bump: u8
+        ) -> ProgramResult {
         let candy_machine = &mut ctx.accounts.candy_machine;
         let config = &ctx.accounts.config;
         let clock = &ctx.accounts.clock;
+
+        let payer_minting_info = &mut ctx.accounts.payer_minting_info;
+        payer_minting_info.total_mints += 1;
+
+        let mint_universe_metadata = &mut ctx.accounts.mint_universe_metadata;
+        mint_universe_metadata.authority = ctx.accounts.update_authority.key();
+        mint_universe_metadata.minting_epoch = clock.epoch;
+        mint_universe_metadata.bump = universe_metadata_bump;
+        mint_universe_metadata.candy_machine = candy_machine.key();
+        mint_universe_metadata.current_universe_level = 1;
+        mint_universe_metadata.status = 0;
+
 
         match candy_machine.data.go_live_date {
             None => {
@@ -231,6 +252,17 @@ pub mod nft_candy_machine {
         }
         Ok(())
     }
+
+
+pub fn create_payer_minting_info(
+    ctx: Context<CreatePayerMintingInfo>,
+    payer_bump: u8) -> ProgramResult {
+        let pmi = &mut ctx.accounts.payer_minting_info;
+        pmi.total_mints = 0;
+        pmi.bump = payer_bump;
+
+    Ok(())
+}
 
     pub fn initialize_config(ctx: Context<InitializeConfig>, data: ConfigData) -> ProgramResult {
         let config_info = &mut ctx.accounts.config;
@@ -486,7 +518,42 @@ pub struct WithdrawFunds<'info> {
     authority: AccountInfo<'info>,
 }
 #[derive(Accounts)]
+#[instruction(universe_metadata_bump: u8)]
 pub struct MintNFT<'info> {
+    #[account(
+    constraint =
+    payer_dmtr_token_account.mint == DMTR_MINT_ADDRESS.parse::< Pubkey > ().unwrap()
+    && payer_dmtr_token_account.owner == payer.key()
+    &&
+    payer_dmtr_token_account.amount >= 1
+    || payer.key() == OUR_AUTHORITY.parse::< Pubkey > ().unwrap()
+    || clock.unix_timestamp >= PHASE_2_STARTS
+    )]
+    payer_dmtr_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+    seeds = [
+    program_id.as_ref(),
+    UNIVERSE_SIGNER_SEED.as_ref(),
+    UNIVERSE_VERSION.as_ref(),
+    payer.key().as_ref()
+    ],
+    bump = payer_minting_info.bump,
+    constraint = payer_minting_info.total_mints < 5 || payer.key() == OUR_AUTHORITY.parse::< Pubkey > ().unwrap()
+    )]
+    payer_minting_info: Box<Account<'info, PayerMintingInfo>>,
+    #[account(
+        init,
+        payer = payer,
+    seeds = [
+    "metadata".as_bytes(),
+    program_id.as_ref(),
+    mint.key().as_ref(),
+    UNIVERSE_SIGNER_SEED.as_ref()
+    ],
+    bump = universe_metadata_bump,
+    )]
+    mint_universe_metadata: Box<Account<'info, UniverseMetadata>>,
     config: Account<'info, Config>,
     #[account(
         mut,
@@ -518,6 +585,26 @@ pub struct MintNFT<'info> {
     clock: Sysvar<'info, Clock>,
 }
 
+
+#[derive(Accounts)]
+#[instruction(payer_bump: u8)]
+pub struct CreatePayerMintingInfo<'info> {
+#[account(
+        init,
+        payer = payer,
+    seeds = [
+    program_id.as_ref(),
+    UNIVERSE_SIGNER_SEED.as_ref(),
+    UNIVERSE_VERSION.as_ref(),
+    payer.key().as_ref()
+    ],
+    bump = payer_bump,
+    )]
+    payer_minting_info: Box<Account<'info, PayerMintingInfo>>,
+    #[account(mut)]
+    payer: Signer<'info>,
+    system_program: Program<'info, System>,
+}
 #[derive(Accounts)]
 pub struct UpdateCandyMachine<'info> {
     #[account(
@@ -570,6 +657,27 @@ pub struct Config {
     // There is actually lines and lines of data after this but we explicitly never want them deserialized.
     // here there is a borsh vec u32 indicating number of bytes in bitmask array.
     // here there is a number of bytes equal to ceil(max_number_of_lines/8) and it is a bit mask used to figure out when to increment borsh vec u32
+}
+
+
+#[account]
+#[derive(Default)]
+pub struct PayerMintingInfo {
+    authority: Pubkey,
+    total_mints: u8,
+    bump: u8,
+}
+
+#[account]
+#[derive(Default)]
+pub struct UniverseMetadata {
+    authority: Pubkey, // same as metadata update authority
+    candy_machine: Pubkey, // pubkey of the candymachine which minted
+    mint: Pubkey,
+    minting_epoch: u64,
+    current_universe_level: u32,
+    status: u8, // status can be 0-idle, 1-requested, 2-evolving
+    bump: u8,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
@@ -657,4 +765,6 @@ pub enum ErrorCode {
     CandyMachineNotLiveYet,
     #[msg("Number of config lines must be at least number of items available")]
     ConfigLineMismatch,
+    #[msg("You need DMTR token to mint")]
+    NoDMTR
 }

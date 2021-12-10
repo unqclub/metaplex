@@ -1,22 +1,23 @@
-import {
-  EXTENSION_JSON,
-  EXTENSION_PNG,
-  EXTENSION_GIF,
-  EXTENSION_JPG,
-} from '../helpers/constants';
+import { BN } from '@project-serum/anchor';
+import { PublicKey } from '@solana/web3.js';
+import fs from 'fs';
+import log from 'loglevel';
 import path from 'path';
+
 import {
   createConfig,
   loadCandyProgram,
   loadWalletKey,
 } from '../helpers/accounts';
-import { PublicKey } from '@solana/web3.js';
-import fs from 'fs';
-import { BN } from '@project-serum/anchor';
 import { loadCache, saveCache } from '../helpers/cache';
-import log from 'loglevel';
-import { awsUpload } from '../helpers/upload/aws';
+import {
+  EXTENSION_GIF,
+  EXTENSION_JPG,
+  EXTENSION_JSON,
+  EXTENSION_PNG,
+} from '../helpers/constants';
 import { arweaveUpload } from '../helpers/upload/arweave';
+import { awsUpload } from '../helpers/upload/aws';
 import { ipfsCreds, ipfsUpload } from '../helpers/upload/ipfs';
 import { chunks } from '../helpers/various';
 
@@ -84,10 +85,12 @@ export async function upload(
   const walletKeyPair = loadWalletKey(keypair);
   const anchorProgram = await loadCandyProgram(walletKeyPair, env, rpcUrl);
 
+  //urkes Ako nema config, generise novi PublicKey
   let config = cacheContent.program.config
     ? new PublicKey(cacheContent.program.config)
     : undefined;
 
+  //urkes Ide chunk po chunk
   const tick = SIZE / 100; //print every one percent
   let lastPrinted = 0;
   await Promise.all(
@@ -120,6 +123,7 @@ export async function upload(
             const manifestBuffer = Buffer.from(JSON.stringify(manifest));
 
             if (i === 0 && !cacheContent.program.uuid) {
+              //urkes Ovde se pravi konfig
               // initialize config
               log.info(`initializing config`);
               try {
@@ -205,6 +209,9 @@ export async function upload(
   );
   saveCache(cacheName, env, cacheContent);
 
+  //urkes Uploadovao je fajlove i sad prolazi kroz iteme iz cache JSON-a
+  //urkes Nama treba ovaj deo. Moramo da iz JSON-a izvucemo sve
+  //urkes Mozda ovde nekako batch-ovati transakcije
   const keys = Object.keys(cacheContent.items);
   try {
     await Promise.all(

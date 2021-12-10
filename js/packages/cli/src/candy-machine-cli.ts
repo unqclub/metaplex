@@ -1,5 +1,6 @@
 #!/usr/bin/env ts-node
 import * as anchor from '@project-serum/anchor';
+import { BN } from '@project-serum/anchor';
 import { Token, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { program } from 'commander';
@@ -22,6 +23,7 @@ import { verifyTokenMetadata } from './commands/verifyTokenMetadata';
 import { withdraw } from './commands/withdraw';
 import {
   AccountAndPubkey,
+  createConfig,
   getBalance,
   getCandyMachineAddress,
   getProgramAccounts,
@@ -55,6 +57,156 @@ if (!fs.existsSync(CACHE_PATH)) {
   fs.mkdirSync(CACHE_PATH);
 }
 log.setLevel(log.levels.INFO);
+
+programCommand('create_config_lines')
+  .option('--config-address <string>', 'config address to add config lines to')
+  .option(
+    '-r, --rpc-url <string>',
+    'custom rpc url since this is a heavy command',
+  )
+  .action(async (_, cmd) => {
+    const { keypair, env, cacheName, rpcUrl, configAddress } = cmd.opts();
+
+    // console.log(cmd.opts());
+    // return;
+
+    const savedContent = loadCache(cacheName, env);
+    const cacheContent = savedContent || {};
+    const walletKeyPair = loadWalletKey(keypair);
+    const anchorProgram = await loadCandyProgram(walletKeyPair, env, rpcUrl);
+    const config = new PublicKey(configAddress);
+
+    let uploadSuccessful = true;
+
+    const keys = Object.keys(cacheContent.items);
+    try {
+      await Promise.all(
+        chunks(Array.from(Array(keys.length).keys()), 1000).map(
+          async allIndexesInSlice => {
+            for (
+              let offset = 0;
+              offset < allIndexesInSlice.length;
+              offset += 10
+            ) {
+              const indexes = allIndexesInSlice.slice(offset, offset + 10);
+              const onChain = indexes.filter(i => {
+                const index = keys[i];
+                return cacheContent.items[index]?.onChain || false;
+              });
+              const ind = keys[indexes[0]];
+
+              if (onChain.length != indexes.length) {
+                log.info(
+                  `Writing indices ${ind}-${keys[indexes[indexes.length - 1]]}`,
+                );
+                try {
+                  await anchorProgram.rpc.addConfigLines(
+                    ind,
+                    indexes.map(i => ({
+                      uri: cacheContent.items[keys[i]].link,
+                      name: cacheContent.items[keys[i]].name,
+                    })),
+                    {
+                      accounts: {
+                        config,
+                        authority: walletKeyPair.publicKey,
+                      },
+                      signers: [walletKeyPair],
+                    },
+                  );
+                  indexes.forEach(i => {
+                    cacheContent.items[keys[i]] = {
+                      ...cacheContent.items[keys[i]],
+                      onChain: true,
+                    };
+                  });
+                  saveCache(cacheName, env, cacheContent);
+                } catch (e) {
+                  log.error(
+                    `saving config line ${ind}-${
+                      keys[indexes[indexes.length - 1]]
+                    } failed`,
+                    e,
+                  );
+                  uploadSuccessful = false;
+                }
+              }
+            }
+          },
+        ),
+      );
+    } catch (e) {
+      log.error(e);
+    } finally {
+      saveCache(cacheName, env, cacheContent);
+    }
+    console.log(`Done. Successful = ${uploadSuccessful}.`);
+  });
+
+programCommand('create_cm_config')
+  .option(
+    '-r, --rpc-url <string>',
+    'custom rpc url since this is a heavy command',
+  )
+  .option('--no-retain-authority', 'Do not retain authority to update metadata')
+  .option('--no-mutable', 'Metadata will not be editable')
+  .action(async (_, cmd) => {
+    const { keypair, env, cacheName, retainAuthority, mutable, rpcUrl } =
+      cmd.opts();
+
+    const savedContent = loadCache(cacheName, env);
+    const cacheContent = savedContent || {};
+    //initialize cacheContent
+    cacheContent.program = {};
+    const walletKeyPair = loadWalletKey(keypair);
+    const anchorProgram = await loadCandyProgram(walletKeyPair, env, rpcUrl);
+
+    // let config = cacheContent.program.config
+    //   ? new PublicKey(cacheContent.program.config)
+    //   : undefined;
+
+    log.info(`initializing config`);
+    try {
+      const res = await createConfig(anchorProgram, walletKeyPair, {
+        maxNumberOfLines: new BN(5),
+        symbol: 'UNQUNI',
+        sellerFeeBasisPoints: 500,
+        isMutable: mutable,
+        maxSupply: new BN(0),
+        retainAuthority: retainAuthority,
+        creators: [
+          {
+            address: new PublicKey(
+              'UN1VJusTaXy7QeLnLcUfgWFMMhsJLueXqi6TaLJG2T6',
+            ),
+            verified: true,
+            share: 80,
+          },
+          {
+            address: new PublicKey(
+              'EDUFe8tMxxZ7yB4QH7TSLeZZf2JCLWDF5S8K5L1wrzEp',
+            ),
+            verified: true,
+            share: 20,
+          },
+        ],
+      });
+      cacheContent.program.uuid = res.uuid;
+      cacheContent.program.config = res.config.toBase58();
+      cacheContent.totalNFTs = 5;
+      // config = res.config;
+
+      log.info(
+        `initialized config for a candy machine with publickey: ${res.config.toBase58()}`,
+      );
+
+      saveCache(cacheName, env, cacheContent);
+    } catch (exx) {
+      log.error('Error deploying config to Solana network.', exx);
+      throw exx;
+    }
+  });
+
 programCommand('upload')
   .argument(
     '<directory>',
@@ -730,6 +882,7 @@ programCommand('create_candy_machine')
       wallet = treasuryAccount;
     }
 
+    //urkes
     const config = new PublicKey(cacheContent.program.config);
     const [candyMachine, bump] = await getCandyMachineAddress(
       config,

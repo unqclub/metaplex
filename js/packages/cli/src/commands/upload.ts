@@ -85,7 +85,7 @@ export async function upload(
   const walletKeyPair = loadWalletKey(keypair);
   const anchorProgram = await loadCandyProgram(walletKeyPair, env, rpcUrl);
 
-  //urkes Ako nema config, generise novi PublicKey
+  //urkes Ucitava config iz JSONa
   let config = cacheContent.program.config
     ? new PublicKey(cacheContent.program.config)
     : undefined;
@@ -212,68 +212,69 @@ export async function upload(
   //urkes Uploadovao je fajlove i sad prolazi kroz iteme iz cache JSON-a
   //urkes Nama treba ovaj deo. Moramo da iz JSON-a izvucemo sve
   //urkes Mozda ovde nekako batch-ovati transakcije
-  const keys = Object.keys(cacheContent.items);
-  try {
-    await Promise.all(
-      chunks(Array.from(Array(keys.length).keys()), 1000).map(
-        async allIndexesInSlice => {
-          for (
-            let offset = 0;
-            offset < allIndexesInSlice.length;
-            offset += 10
-          ) {
-            const indexes = allIndexesInSlice.slice(offset, offset + 10);
-            const onChain = indexes.filter(i => {
-              const index = keys[i];
-              return cacheContent.items[index]?.onChain || false;
-            });
-            const ind = keys[indexes[0]];
+  //TODO!
+  // const keys = Object.keys(cacheContent.items);
+  // try {
+  //   await Promise.all(
+  //     chunks(Array.from(Array(keys.length).keys()), 1000).map(
+  //       async allIndexesInSlice => {
+  //         for (
+  //           let offset = 0;
+  //           offset < allIndexesInSlice.length;
+  //           offset += 10
+  //         ) {
+  //           const indexes = allIndexesInSlice.slice(offset, offset + 10);
+  //           const onChain = indexes.filter(i => {
+  //             const index = keys[i];
+  //             return cacheContent.items[index]?.onChain || false;
+  //           });
+  //           const ind = keys[indexes[0]];
 
-            if (onChain.length != indexes.length) {
-              log.info(
-                `Writing indices ${ind}-${keys[indexes[indexes.length - 1]]}`,
-              );
-              try {
-                await anchorProgram.rpc.addConfigLines(
-                  ind,
-                  indexes.map(i => ({
-                    uri: cacheContent.items[keys[i]].link,
-                    name: cacheContent.items[keys[i]].name,
-                  })),
-                  {
-                    accounts: {
-                      config,
-                      authority: walletKeyPair.publicKey,
-                    },
-                    signers: [walletKeyPair],
-                  },
-                );
-                indexes.forEach(i => {
-                  cacheContent.items[keys[i]] = {
-                    ...cacheContent.items[keys[i]],
-                    onChain: true,
-                  };
-                });
-                saveCache(cacheName, env, cacheContent);
-              } catch (e) {
-                log.error(
-                  `saving config line ${ind}-${
-                    keys[indexes[indexes.length - 1]]
-                  } failed`,
-                  e,
-                );
-                uploadSuccessful = false;
-              }
-            }
-          }
-        },
-      ),
-    );
-  } catch (e) {
-    log.error(e);
-  } finally {
-    saveCache(cacheName, env, cacheContent);
-  }
+  //           if (onChain.length != indexes.length) {
+  //             log.info(
+  //               `Writing indices ${ind}-${keys[indexes[indexes.length - 1]]}`,
+  //             );
+  //             try {
+  //               await anchorProgram.rpc.addConfigLines(
+  //                 ind,
+  //                 indexes.map(i => ({
+  //                   uri: cacheContent.items[keys[i]].link,
+  //                   name: cacheContent.items[keys[i]].name,
+  //                 })),
+  //                 {
+  //                   accounts: {
+  //                     config,
+  //                     authority: walletKeyPair.publicKey,
+  //                   },
+  //                   signers: [walletKeyPair],
+  //                 },
+  //               );
+  //               indexes.forEach(i => {
+  //                 cacheContent.items[keys[i]] = {
+  //                   ...cacheContent.items[keys[i]],
+  //                   onChain: true,
+  //                 };
+  //               });
+  //               saveCache(cacheName, env, cacheContent);
+  //             } catch (e) {
+  //               log.error(
+  //                 `saving config line ${ind}-${
+  //                   keys[indexes[indexes.length - 1]]
+  //                 } failed`,
+  //                 e,
+  //               );
+  //               uploadSuccessful = false;
+  //             }
+  //           }
+  //         }
+  //       },
+  //     ),
+  //   );
+  // } catch (e) {
+  //   log.error(e);
+  // } finally {
+  //   saveCache(cacheName, env, cacheContent);
+  // }
   console.log(`Done. Successful = ${uploadSuccessful}.`);
   return uploadSuccessful;
 }

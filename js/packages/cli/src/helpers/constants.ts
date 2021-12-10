@@ -15,6 +15,8 @@ export const MAX_CREATOR_LEN = 32 + 1 + 1;
 export const ARWEAVE_PAYMENT_WALLET = new PublicKey(
   '6FKvsq4ydWFci6nGq9ckbjYMtnmaqAoatz5c9XWjiDuS',
 );
+
+//urkes TODO this needs to be changed to MAINNET program id
 export const CANDY_MACHINE_PROGRAM_ID = new PublicKey(
   '6U5p5noGQyx8Je33c8jp6dg3hzKKTcwuvtSEKJzK91KQ',
 );
